@@ -91,6 +91,7 @@ final class CameraViewModel: ObservableObject {
       calculateDetectedFaceValidity()
     }
   }
+  
 
   // MARK: - Publishers of Vision data directly
   @Published private(set) var faceDetectedState: FaceDetectedState
