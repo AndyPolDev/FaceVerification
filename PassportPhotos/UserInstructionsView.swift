@@ -38,6 +38,7 @@ struct UserInstructionsView: View {
   var body: some View {
     Text(faceDetectionStateLabel())
       .font(.title)
+      .foregroundColor(.white)
   }
 }
 

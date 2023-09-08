@@ -85,8 +85,8 @@
 			isa = PBXGroup;
 			children = (
 				1839F4AF25190F2A00BB00F1 /* AppMain.swift */,
-				E269538D27102430002BA294 /* CameraControlsFooterView.swift */,
 				E269538B27102426002BA294 /* CameraControlsHeaderView.swift */,
+				E269538D27102430002BA294 /* CameraControlsFooterView.swift */,
 				E2695389271020B6002BA294 /* CameraOverlayView.swift */,
 				E269537E270F86B7002BA294 /* CameraView.swift */,
 				E226A16E271F0A5200ED4786 /* CameraViewController.swift */,

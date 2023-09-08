@@ -40,7 +40,7 @@ struct CameraOverlayView: View {
       VStack {
         CameraControlsHeaderView(model: model)
         Spacer()
-          .frame(height: geometry.size.width * 4 / 3)
+          .frame(height: geometry.size.width * 1)
         CameraControlsFooterView(model: model)
       }
     }

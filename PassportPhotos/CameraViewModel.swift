@@ -91,7 +91,11 @@ final class CameraViewModel: ObservableObject {
       calculateDetectedFaceValidity()
     }
   }
-  
+  @Published private(set) var isAcceptableBounds: FaceBoundsState {
+    didSet {
+      calculateDetectedFaceValidity()
+    }
+  }
 
   // MARK: - Publishers of Vision data directly
   @Published private(set) var faceDetectedState: FaceDetectedState
@@ -122,6 +126,7 @@ final class CameraViewModel: ObservableObject {
     isAcceptableRoll = false
     isAcceptablePitch = false
     isAcceptableYaw = false
+    isAcceptableBounds = .unknown
   }
 
   // MARK: Actions
@@ -187,6 +192,7 @@ extension CameraViewModel {
     isAcceptableRoll = false
     isAcceptablePitch = false
     isAcceptableYaw = false
+    isAcceptableBounds = .unknown
   }
 
   func processUpdatedFaceGeometry() {
@@ -201,11 +207,27 @@ extension CameraViewModel {
       let pitch = faceGeometryModel.pitch.doubleValue
       let yaw = faceGeometryModel.yaw.doubleValue
       updateAcceptableRollPitchYaw(using: roll, pitch: pitch, yaw: yaw)
+      let boundingBox = faceGeometryModel.boundingBox
+      updateAcceptableBounds(using: boundingBox)
       return
     }
   }
 
-  func updateAcceptableBounds(using boundingBox: CGRect) { }
+  func updateAcceptableBounds(using boundingBox: CGRect) {
+    if boundingBox.width > 1.2 * faceLayoutGuideFrame.width {
+      isAcceptableBounds = .detectedFaceTooLarge
+    } else if boundingBox.width * 1.2 < faceLayoutGuideFrame.width {
+      isAcceptableBounds = .detectedFaceTooSmall
+    } else {
+      if abs(boundingBox.midX - faceLayoutGuideFrame.midX) > 50 {
+        isAcceptableBounds = .detectedFaceOffCentre
+      } else if abs(boundingBox.midY - faceLayoutGuideFrame.midY) > 50 {
+        isAcceptableBounds = .detectedFaceOffCentre
+      } else {
+        isAcceptableBounds = .detectedFaceAppropriateSizeAndPosition
+      }
+    }
+  }
 
   func updateAcceptableRollPitchYaw(using roll: Double, pitch: Double, yaw: Double) {
     isAcceptableRoll = (roll > 1.2 && roll < 1.6)
@@ -216,6 +238,10 @@ extension CameraViewModel {
   func processUpdatedFaceQuality() { }
 
   func calculateDetectedFaceValidity() {
-    hasDetectedValidFace = isAcceptableRoll && isAcceptablePitch && isAcceptableYaw
+    hasDetectedValidFace =
+      isAcceptableBounds == .detectedFaceAppropriateSizeAndPosition &&
+      isAcceptableRoll &&
+      isAcceptablePitch &&
+      isAcceptableYaw
   }
 }
