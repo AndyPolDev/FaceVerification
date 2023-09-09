@@ -1,54 +1,20 @@
-/// Copyright (c) 2021 Razeware LLC
-/// 
-/// Permission is hereby granted, free of charge, to any person obtaining a copy
-/// of this software and associated documentation files (the "Software"), to deal
-/// in the Software without restriction, including without limitation the rights
-/// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-/// copies of the Software, and to permit persons to whom the Software is
-/// furnished to do so, subject to the following conditions:
-/// 
-/// The above copyright notice and this permission notice shall be included in
-/// all copies or substantial portions of the Software.
-/// 
-/// Notwithstanding the foregoing, you may not use, copy, modify, merge, publish,
-/// distribute, sublicense, create a derivative work, and/or sell copies of the
-/// Software in any work that is designed, intended, or marketed for pedagogical or
-/// instructional purposes related to programming, coding, application development,
-/// or information technology.  Permission for such use, copying, modification,
-/// merger, publication, distribution, sublicensing, creation of derivative works,
-/// or sale is expressly withheld.
-/// 
-/// This project and source code may use libraries or frameworks that are
-/// released under various Open-Source licenses. Use of those libraries and
-/// frameworks are governed by their own individual licenses.
-///
-/// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-/// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-/// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-/// THE SOFTWARE.
-
 import AVFoundation
-import Combine
 import CoreImage.CIFilterBuiltins
 import UIKit
 import Vision
+import VideoToolbox
 
 protocol FaceDetectorDelegate: NSObjectProtocol {
   func convertFromMetadataToPreviewRect(rect: CGRect) -> CGRect
   func draw(image: CIImage)
 }
 
-class FaceDetector: NSObject {
+final class FaceDetector: NSObject {
   weak var viewDelegate: FaceDetectorDelegate?
   weak var model: CameraViewModel?
 
   var sequenceHandler = VNSequenceRequestHandler()
   var currentFrameBuffer: CVImageBuffer?
-
-  var subscriptions = Set<AnyCancellable>()
 
   let imageProcessingQueue = DispatchQueue(
     label: "Image Processing Queue",
@@ -67,12 +33,17 @@ extension FaceDetector: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     let detectFaceRectanglesRequest = VNDetectFaceRectanglesRequest(completionHandler: detectedFaceRectangles)
-    detectFaceRectanglesRequest.revision = VNDetectFaceRectanglesRequestRevision2
-
+    detectFaceRectanglesRequest.revision = VNDetectFaceRectanglesRequestRevision3
+    
+    let detectCaptureQualityRequest = VNDetectFaceCaptureQualityRequest(completionHandler: detectedFaceQualityRequest)
+    detectCaptureQualityRequest.revision = VNDetectFaceCaptureQualityRequestRevision2
+    
+    self.detectSmileOn(buffer: imageBuffer)
+    
     currentFrameBuffer = imageBuffer
     do {
       try sequenceHandler.perform(
-        [detectFaceRectanglesRequest],
+        [detectFaceRectanglesRequest, detectCaptureQualityRequest],
         on: imageBuffer,
         orientation: .leftMirrored)
     } catch {
@@ -110,13 +81,49 @@ extension FaceDetector {
     model.perform(action: .faceObservationDetected(faceObservationModel))
   }
 
-  func detectedFaceQualityRequest(request: VNRequest, error: Error?) { }
+  func detectedFaceQualityRequest(request: VNRequest, error: Error?) {
+    guard let model = model else { return }
+    
+    guard let results = request.results as? [VNFaceObservation], let result = results.first else {
+      model.perform(action: .noFaceDetected)
+      return
+    }
+    
+    let faceQualityModel = FaceQualityModel(quality: result.faceCaptureQuality ?? 0)
+     
+    model.perform(action: .faceQualityObservationDetected(faceQualityModel))
+  }
+  
+  func detectSmileOn(buffer: CVPixelBuffer) {
+    guard let model = model else { return }
+      if let inputImage = UIImage(pixelBuffer: buffer) {
+          let ciImage = CIImage(cgImage: inputImage.cgImage!)
+          
+          let options = [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+          let faceDetector = CIDetector(ofType: CIDetectorTypeFace, context: nil, options: options)!
+          let smileDetector = faceDetector.features(
+              in: ciImage,
+              options: [CIDetectorSmile: true]) as? [CIFaceFeature]
+          
+          if let face = smileDetector?.first as? CIFaceFeature {
+            let faceSmileModel = FaceSmileModel(smileDetected: face.hasSmile)
+            model.perform(action: .faceSmaileObservationDetected(faceSmileModel))
+          }
+      }
+  }
+}
 
-  func detectedSegmentationRequest(request: VNRequest, error: Error?) { }
 
-  func savePassportPhoto(from pixelBuffer: CVPixelBuffer) { }
-
-  func removeBackgroundFrom(image: CIImage, using maskPixelBuffer: CVPixelBuffer) -> CIImage {
-    return image
+extension UIImage {
+  
+  public convenience init?(pixelBuffer: CVPixelBuffer) {
+    var cgImage: CGImage?
+    VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cgImage)
+    
+    guard let cgIm = cgImage else {
+      return nil
+    }
+    
+    self.init(cgImage: cgIm)
   }
 }
